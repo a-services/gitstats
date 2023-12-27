@@ -2,6 +2,7 @@ import datetime
 import re
 import os
 import json
+import subprocess
 
 from multiprocessing import Pool
 from .DataCollector import DataCollector
@@ -584,7 +585,34 @@ class GitDataCollector(DataCollector):
             'files_by_stamp': self.files_by_stamp,
             'extensions': self.extensions,
             'changes_by_date': self.changes_by_date,
-            'changes_by_date_by_author': self.changes_by_date_by_author
+            'changes_by_date_by_author': self.changes_by_date_by_author,
+            'commit_comments': {
+                commit_hash: {
+                    "comment": comment,
+                    "comment_length": len(comment)
+                } for commit_hash, comment in self.collect_commit_comments().items()
+            }
         }
         
         return json.dumps(data, indent=4)
+
+    @staticmethod
+    def collect_commit_comments():
+        commit_comments = {}
+
+        git_log_command = ['git', 'log', '--pretty=format:%H|%s', '--abbrev=12'] + getlogrange("HEAD").split()
+
+        try:
+            output = subprocess.check_output(git_log_command, stderr=subprocess.PIPE, shell=False,
+                                             universal_newlines=True)
+            lines = output.splitlines()
+
+            for line in lines:
+                if "|" in line:
+                    commit_hash, commit_message = line.split("|", 1)
+                    commit_comments[commit_hash] = commit_message
+
+        except subprocess.CalledProcessError as e:
+            print("Error executing git log command:", e.stderr)
+
+        return commit_comments
